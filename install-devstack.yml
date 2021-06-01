@@ -1,0 +1,55 @@
+- name: VM initialization
+  hosts: all
+  become: yes
+  become_user: root
+  tasks:
+    - name: Add the 'stack' user for devstack
+      user:
+        name: stack
+        comment: Dev stack user
+        shell: /bin/bash
+        # Definition of a custom user HOME directory, according to the DevStack recommendation
+        home: /opt/stack
+
+    - name: Make 'stack' a privileged user
+      copy:
+        content: 'stack ALL=(ALL) NOPASSWD: ALL'
+        dest: /etc/sudoers.d/stack
+        mode: 0440
+
+    # Without the `acl` package you may (and probably will) experience permission related issues
+    - name: Install acl to fix unprivileged user error
+      package:
+        name: acl
+        state: present
+
+- name: DevStack setup as 'stack' user
+  hosts: all
+  become: yes
+  become_user: stack
+  tasks:
+    - name: Clone devstack
+      git:
+        repo: https://opendev.org/openstack/devstack
+        dest: /opt/stack/devstack
+        version: stable/queens
+
+    - name: Install devstack, this step may take up to 30 minutes or even more
+      # Use Ansible variable to check if installation should be executed
+      shell:
+        chdir: /opt/stack/devstack
+        cmd: ./stack.sh
+      register: devstack_output
+      environment:
+        FORCE: 'yes'
+        HOST_IP: '192.168.1.201'
+        FLOATING_RANGE: '192.168.1.224/27'
+        FIXED_RANGE: '10.11.12.0/24'
+        FIXED_NETWORK_SIZE: 256
+        ADMIN_PASSWORD: 'secret'
+        DATABASE_PASSWORD: 'secret'
+        RABBIT_PASSWORD: 'secret'
+        SERVICE_PASSWORD: 'secret'
+
+
+    - debug: var=devstack_output.stdout_lines
